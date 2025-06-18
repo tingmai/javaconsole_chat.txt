@@ -1,0 +1,135 @@
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+public class ChatServer {
+    private static final int PORT = 12345;
+    private static Set<PrintWriter> clientWriters = new HashSet<>();
+
+    public static void main(String[] args) {
+        System.out.println("Chat Server is running...");
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            while (true) {
+                new Handler(serverSocket.accept()).start();
+            }
+        } catch (IOException e) {
+            System.err.println("Server exception: " + e.getMessage());
+        }
+    }
+
+    private static class Handler extends Thread {
+        private Socket socket;
+        private PrintWriter out;
+        private BufferedReader in;
+
+        public Handler(Socket socket) {
+            this.socket = socket;
+        }
+
+        public void run() {
+            try {
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                out = new PrintWriter(socket.getOutputStream(), true);
+
+                synchronized (clientWriters) {
+                    clientWriters.add(out);
+                }
+
+                String message;
+                while ((message = in.readLine()) != null) {
+                    System.out.println("Received: " + message);
+                    broadcast(message);
+                }
+            } catch (IOException e) {
+                System.err.println("Handler exception: " + e.getMessage());
+            } finally {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+                synchronized (clientWriters) {
+                    clientWriters.remove(out);
+                }
+            }
+        }
+    }
+
+    private static void broadcast(String message) {
+        synchronized (clientWriters) {
+            for (PrintWriter writer : clientWriters) {
+                writer.println(message);
+            }
+        }
+    }
+}
+
+------------------------------
+
+
+import java.io.*;
+import java.net.*;
+import java.util.Scanner;
+
+public class ChatClient {
+    private static final String SERVER_IP = "localhost";
+    private static final int SERVER_PORT = 12345;
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter your name: ");
+        String name = scanner.nextLine();
+
+        try {
+            Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+            System.out.println("Connected to chat server");
+
+            // Thread for reading messages from server
+            new Thread(new ServerHandler(socket)).start();
+
+            // Write messages to server
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            out.println(name + " has joined the chat");
+
+            String userInput;
+            while ((userInput = scanner.nextLine()) != null) {
+                out.println(name + ": " + userInput);
+                if (userInput.equalsIgnoreCase("exit")) {
+                    break;
+                }
+            }
+
+            socket.close();
+            System.out.println("Disconnected from server");
+        } catch (IOException e) {
+            System.err.println("Client exception: " + e.getMessage());
+        } finally {
+            scanner.close();
+        }
+    }
+
+    private static class ServerHandler implements Runnable {
+        private Socket socket;
+        private BufferedReader in;
+
+        public ServerHandler(Socket socket) {
+            this.socket = socket;
+            try {
+                this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public void run() {
+            try {
+                String serverResponse;
+                while ((serverResponse = in.readLine()) != null) {
+                    System.out.println(serverResponse);
+                }
+            } catch (IOException e) {
+                System.err.println("Server handler exception: " + e.getMessage());
+            }
+        }
+    }
+}
