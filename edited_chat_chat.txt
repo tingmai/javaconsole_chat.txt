@@ -1,0 +1,173 @@
+
+ChatServer.java
+
+
+package thread_exercise;
+
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+
+
+public class ChatServer {
+	
+	public static int PORT=12345;
+	public static Set<PrintWriter> clientWriters=new HashSet<>();
+	
+	
+	public static void main(String args[]) {
+		
+	  System.out.println("Chat Server is running on PORT 12345...");
+    	
+    	try(ServerSocket serverSocket=new ServerSocket(PORT)){
+    		
+    		while(true) {
+    			new ClientHandler(serverSocket.accept()).start();
+    		}
+    	}
+    	catch(Exception e) {
+    		System.err.println("Server Error..."+e.getMessage());
+    	}
+		
+		
+	}
+	
+	public static class ClientHandler extends Thread{
+		
+		public Socket socket;
+		public BufferedReader in;
+		public PrintWriter out;
+		
+
+		public ClientHandler(Socket socket) {
+			super();
+			this.socket = socket;
+		}
+		
+		public void run() {
+			
+			try {
+			in=new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			out=new PrintWriter(socket.getOutputStream(),true);
+			
+			synchronized(clientWriters) {
+				clientWriters.add(out);
+			}
+			
+			String message;
+			
+			while((message=in.readLine())!=null) {
+				System.out.println("Received:"+message);
+				broadcast(message);
+			}
+			
+			
+			
+			
+			}
+			catch(Exception e) {
+				System.out.println("Server Error..."+e.getMessage());
+			}
+			
+			finally {
+				
+				try {
+					socket.close();
+				}
+				catch(Exception e) {
+					
+				}
+				
+				synchronized(clientWriters) {
+					clientWriters.remove(out);
+				}
+			}
+			
+			
+		}
+
+		private void broadcast(String message) {
+			// TODO Auto-generated method stub
+			for(PrintWriter writer:clientWriters) {
+				writer.println(message);
+			}
+		}
+		
+		
+	}
+
+}
+
+
+-----------
+
+
+ChatClient.java
+
+
+package thread_exercise;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.util.Scanner;
+
+public class ChatClient {
+	
+	public static final String SERVER_IP="localhost";
+	public static final int SERVER_PORT=12345;
+	
+	public static void main(String args[]) {
+		
+	
+	Scanner scanner = new Scanner(System.in);
+    System.out.print("Enter your name: ");
+    String name = scanner.nextLine();
+
+    try {
+        Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+        System.out.println("Connected to chat server");
+
+        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+        // Start a thread to read messages from the server
+        new Thread(() -> {
+            try {
+                String serverMessage;
+                while ((serverMessage = in.readLine()) != null) {
+                    System.out.println(serverMessage);
+                }
+            } catch (IOException e) {
+                System.out.println("Disconnected from server");
+            }
+        }).start();
+
+        // Read user input and send to server
+        String userInput;
+        while (true) {
+            userInput = scanner.nextLine();
+            if (userInput.equalsIgnoreCase("exit")) {
+                break;
+            }
+            out.println(name + ": " + userInput);
+        }
+
+        socket.close();
+        scanner.close();
+    } catch (IOException e) {
+        System.err.println("Error connecting to server: " + e.getMessage());
+    }
+    
+	}
+
+}
+
+
+
+
+
+
